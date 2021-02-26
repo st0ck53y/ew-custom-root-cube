@@ -1,6 +1,6 @@
 // TODO xhr intercept for non-user-scripted calls would be needed is needed, but that will get super messy with recursion if not thought out...
 
-function getHierarchy(version, cubeId, successCallback, errCallback) {
+function getHierarchy(cubeId, successCallback, errCallback) {
 	return getHierarchy('1.0', cubeId, successCallback, errCallback);
 }
 
@@ -21,7 +21,7 @@ function getHierarchy(version, cubeId, successCallback, errCallback) {
 	});
 }
 
-function getAncestors(version, cubeId, successCallback, errCallback) {
+function getAncestors(cubeId, successCallback, errCallback) {
 	getAncestors('1.0', cubeId, successCallback, errCallback);
 }
 
@@ -38,7 +38,7 @@ function getAncestors(version, cubeId, successCallback, errCallback) {
 	});
 }
 
-function getDescendents(version, cubeId, successCallback, errCallback) {
+function getDescendents(cubeId, successCallback, errCallback) {
 	return getDescendents('1.0', cubeId, successCallback, errCallback);
 }
 
