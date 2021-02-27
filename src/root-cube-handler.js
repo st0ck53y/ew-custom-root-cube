@@ -15,6 +15,41 @@
 
     let DEBUG = true;
 
+    
+
+    function reformatHierarchy(originalTreeData, cubeId) {
+        // see #reformatAncestors and #reformatDescendents for logics \o/
+        return originalTreeData;
+    }
+
+    function reformatAncestors(ancestors, cubeId) {
+        // is cubeId or any ancestors in the oldRoot->newRoot list?
+        //   yes :- weeeeee
+        //   no :- not possible, oldRoot should be. it should _always_ have a cube in the list. _always_
+        return ancestors;
+    }
+
+    function reformatDescendents(descendents, cubeId) {
+        // is cubeId in the oldRoot->newRoot list?
+        //   yes :- fun
+        //   no :- return unmodified?
+        return descendents;
+    }
+
+    function reformatAggregate(aggregate, cubeId) {
+        // is cubeId in oldRoot->newRoot list?
+        //   yes :- swap parent and child-in--root-list, return other children untouched (TODO confirm no other kids needed, none removed, etc?)
+        //   no :- return unmodified
+        return aggregate;
+    }
+
+
+
+
+
+
+
+
     let interceptedRequests = [
         {"type":"hierarchy","regex":/\/1\.0\/task\/\d+\/hierarchy/},
         {"type":"ancestors","regex":/\/1\.0\/task\/\d+\/ancestors/},
@@ -27,28 +62,29 @@
 
     function handleResponse(url, data) {
         if (DEBUG) { console.log("handling intercepted response: {"+url+"}, {"+data+"}"); }
-        let origTreeData = data;
+        let origTreeData = JSON.parse(data);
+        let newData = JSON.parse(data);
         let interceptedRoutes = interceptedRequests.filter(d=>{return d.regex.test(url)});
         if (interceptedRoutes.length === 0 || undefined === interceptedRoutes[0]) return;
         let cubeId = url.match(interceptionRoot)[2];
         switch (interceptedRoutes[0]) {
             case "hierarchy":
-
+                newData = reformatHierarchy(origTreeData, cubeId);
                 break;
             case "ancestors":
-
+                newData = reformatAncestors(origTreeData, cubeId);
                 break;
             case "descendents":
-
+                newData = reformatDescendents(origTreeData, cubeId);
                 break;
             case "aggregate":
-
+                newData = reformatAggregate(origTreeData, cubeId);
                 break;
             default:
                 console.log("Unknown url has been mistakenly intercepted! {" + url + "}");
                 return;
         }
-        return noInterceptGetData(url);
+        return JSON.stringify(newData);
     }
 
     function getHierarchy(cubeId) {
