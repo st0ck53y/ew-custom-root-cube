@@ -255,6 +255,11 @@
         //TODO check cube belongs to cell
         //TODO sanity check cubeId isn't already root
         console.log("setting custom root");
+        let currentRoot = K.ls.get(cellId);
+        if (currentRoot !== undefined && currentRoot !== null && currentRoot.cubeId === cubeId) {
+            //already set to this cube
+            return;
+        }
         let customRoot = {
             cellId: cellId,
             cubeId: cubeId,
@@ -263,16 +268,13 @@
             disabled: false
         }
         K.ls.set(cellId, customRoot);
-        console.log(JSON.stringify(K.ls.get(cellId)));
         let rootPath = buildRootPath(cubeId);
         K.ss.set(cellId, rootPath.toString());
-        console.log(K.ss.get(cellId));
     }
 
     function buildRootPath(cubeId) {
         let rootPath = new LinkedList();
         let curCube = getTaskDetails(cubeId);
-        console.log(curCube);
         while (curCube.parent !== null) {
             rootPath.addAtHead(curCube.id);
             curCube = getTaskDetails(curCube.parent);
