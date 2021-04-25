@@ -15,7 +15,7 @@
 
     let DEBUG = true;
 
-    let customRootManual = null;
+    let customRootManual = 4635731;
 
     /**
      * State: script init
@@ -85,10 +85,10 @@
         // localStorage
         ls: {
             get: function (key) {
-                return localStorage.getItem(account.account.uid + '-ewrch-' + key);
+                return JSON.parse(localStorage.getItem(account.account.uid + '-ewrch-' + key));
             },
             set: function (key, val) {
-                localStorage.setItem(account.account.uid + '-ewrch-' + key, val);
+                localStorage.setItem(account.account.uid + '-ewrch-' + key, JSON.stringify(val));
             },
             remove: function (key) {
                 localStorage.removeItem(account.account.uid + '-ewrch-' + key);
@@ -98,10 +98,10 @@
         // sessionStorage
         ss: {
             get: function (key) {
-                return sessionStorage.getItem(account.account.uid + '-ewrch-' + key);
+                return JSON.parse(sessionStorage.getItem(account.account.uid + '-ewrch-' + key));
             },
             set: function (key, val) {
-                sessionStorage.setItem(account.account.uid + '-ewrch-' + key, val);
+                sessionStorage.setItem(account.account.uid + '-ewrch-' + key, JSON.stringify(val));
             },
             remove: function (key) {
                 sessionStorage.removeItem(account.account.uid + '-ewrch-' + key);
@@ -111,7 +111,7 @@
 
     class LLNode {
         constructor(cubeId) {
-            this.cubeId = cubeId;
+            this.cubeId = parseInt(cubeId);
             this.next = null;
         }
     }
@@ -176,11 +176,11 @@
             let cur = this.head;
             while (cur !== null) {
                 if (cubes.includes(cur.cubeId)) {
-                    joiner = cur;
+                    joiner = cur.cubeId;
                 }
                 cur = cur.next;
             }
-            return joiner === null ? null : joiner.cubeId;
+            return (joiner == null ? null : joiner);
         }
 
         getNodeChild(cubeId) {
@@ -200,6 +200,7 @@
             while (cur !== null) {
                 if (cur.cubeId === cubeId) {
                     hasJoined = true;
+                    cur = cur.next;
                     continue;
                 }
                 if (!hasJoined) {
@@ -207,8 +208,13 @@
                 } else {
                     post.push(cur.cubeId);
                 }
+                cur = cur.next;
             }
             return {pre: pre, post: post};
+        }
+
+        getFullList() {
+            return this.arr;
         }
 
         cubeIsHead(cubeId) {
@@ -248,23 +254,28 @@
         //TODO check cube not currently stashed
         //TODO check cube belongs to cell
         //TODO sanity check cubeId isn't already root
+        console.log("setting custom root");
         let customRoot = {
             cellId: cellId,
             cubeId: cubeId,
+            originalRootId: null, //TODO
             lastAccessed: Date.now(),
             disabled: false
         }
         K.ls.set(cellId, customRoot);
+        console.log(JSON.stringify(K.ls.get(cellId)));
         let rootPath = buildRootPath(cubeId);
-        K.ss.set(cellId, rootPath);
+        K.ss.set(cellId, rootPath.toString());
+        console.log(K.ss.get(cellId));
     }
 
     function buildRootPath(cubeId) {
         let rootPath = new LinkedList();
         let curCube = getTaskDetails(cubeId);
+        console.log(curCube);
         while (curCube.parent !== null) {
             rootPath.addAtHead(curCube.id);
-            curCube = getTaskDetails(cubeId.parent);
+            curCube = getTaskDetails(curCube.parent);
             //TODO add progress notif? larger lineage could take a while to generate
         }
         rootPath.addAtHead(curCube.id);
@@ -275,7 +286,9 @@
         //FIXME - this doesnt work when the optional "depth" param is used
         // https://eyewire.org/apidoc#/get-task_hierarchy
         let newAncestors = reformatAncestors(originalTreeData.ancestors, cubeId);
+        console.log(newAncestors);
         let newDescendents = reformatDescendents(originalTreeData.descendents, cubeId);
+        console.log(newDescendents);
         return {ancestors: newAncestors, descendents: newDescendents};
     }
 
@@ -283,8 +296,15 @@
         // is cubeId or any ancestors in the oldRoot->newRoot list?
         //   yes :- remove in-list ancestors, add rest of list
         //   no :- not possible, oldRoot should be. it should _always_ have a cube in the list. _always_
-        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        console.log("reformatting ancestors: ");
+        console.log(ancestors)
+        let lineage = LinkedList.fromString(K.ss.get(null)); //TODO multiple cells \o/
         if (lineage !== null) {
+            if (ancestors.length === 0) {
+                return lineage.getFullList();
+            } else if (lineage.contains(cubeId)) {
+                return lineage.getSplitList(cubeId).post;
+            }
             let joiningCube = lineage.getJoiningCube(ancestors);
             let splitList = lineage.getSplitList(joiningCube);
             return ancestors.filter(cube => !splitList.pre.includes(cube)).concat(splitList.post);
@@ -298,26 +318,33 @@
         // is cubeId in the oldRoot->newRoot list?
         //   yes :- get full list, remove real-descendents from next-in-list node
         //   no :- return unmodified
-        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        console.log("reformatting descendents: ");
+        console.log(descendents)
+        let lineage = LinkedList.fromString(K.ss.get(null)); //TODO multiple cells \o/
         if (lineage !== null && lineage.contains(cubeId)) {
             if (lineage.cubeIsTail(cubeId)) {
                 // tail == custom root - return full cell cube list
+                console.log("cube is tail");
                 return getDescendents(lineage.getHeadCube());
             } else {
+                console.log("cube isnt tail");
                 let ignoreAfter = lineage.getNodeChild(cubeId);
                 let ignoreDescendents = getDescendents(ignoreAfter).push(ignoreAfter);
                 return descendents.filter(cube => !ignoreDescendents.includes(cube));
             }
         } else {
+            console.log("cube isnt in list");
             return descendents;
         }
     }
+
+
 
     function reformatAggregate(aggregate, cubeId) {
         // is cubeId in oldRoot->newRoot list?
         //   yes :- swap parent and child-in-root-list, return other children untouched
         //   no :- return unmodified
-        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        let lineage = LinkedList.fromString(K.ss.get(null)); //TODO multiple cells \o/
         if (lineage !== null && lineage.contains(cubeId)) {
             if (lineage.cubeIsHead(cubeId)) {
                 let newParent = lineage.getNodeChild(cubeId);
@@ -358,19 +385,26 @@
         let origTreeData = JSON.parse(data);
         let newData = JSON.parse(data);
         let interceptedRoutes = interceptedRequests.filter(d=>{return d.regex.test(url)});
+        console.log("Intercepted routes: ");
+        console.log(interceptedRoutes);
         if (interceptedRoutes.length === 0 || undefined === interceptedRoutes[0]) return;
-        let cubeId = url.match(interceptionRoot)[2];
-        switch (interceptedRoutes[0]) {
+        console.log("Getting cubeId from url: " + url.match(interceptionRoot));
+        let cubeId = url.match(interceptionRoot);
+        switch (interceptedRoutes[0].type) {
             case "hierarchy":
+                console.log("intercepted hierarchy call - reformatting");
                 newData = reformatHierarchy(origTreeData, cubeId);
                 break;
             case "ancestors":
+                console.log("intercepted ancestors call - reformatting");
                 newData = reformatAncestors(origTreeData, cubeId);
                 break;
             case "descendents":
+                console.log("intercepted descendents call - reformatting");
                 newData = reformatDescendents(origTreeData, cubeId);
                 break;
             case "aggregate":
+                console.log("intercepted aggregate call - reformatting");
                 newData = reformatAggregate(origTreeData, cubeId);
                 break;
             default:
@@ -408,7 +442,7 @@
         xhr.noIntercept = true;
         xhr.open("GET", url, false);
         xhr.send()
-        return xhr.responseText;
+        return JSON.parse(xhr.responseText);
     }
 
     function checkInterception(url) {
