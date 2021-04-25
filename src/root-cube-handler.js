@@ -285,11 +285,13 @@
     function reformatHierarchy(originalTreeData, cubeId) {
         //FIXME - this doesnt work when the optional "depth" param is used
         // https://eyewire.org/apidoc#/get-task_hierarchy
+        console.log("cubeId: ");
+        console.log(cubeId);
         let newAncestors = reformatAncestors(originalTreeData.ancestors, cubeId);
         console.log(newAncestors);
-        let newDescendents = reformatDescendents(originalTreeData.descendents, cubeId);
+        let newDescendents = reformatDescendents(originalTreeData.descendants, cubeId); //descendants is used in response? descendents used in docs. ;~;
         console.log(newDescendents);
-        return {ancestors: newAncestors, descendents: newDescendents};
+        return {ancestors: newAncestors, descendants: newDescendents};
     }
 
     function reformatAncestors(ancestors, cubeId) {
@@ -320,25 +322,25 @@
         //   no :- return unmodified
         console.log("reformatting descendents: ");
         console.log(descendents)
+        console.log(cubeId);
         let lineage = LinkedList.fromString(K.ss.get(null)); //TODO multiple cells \o/
         if (lineage !== null && lineage.contains(cubeId)) {
             if (lineage.cubeIsTail(cubeId)) {
                 // tail == custom root - return full cell cube list
                 console.log("cube is tail");
-                return getDescendents(lineage.getHeadCube());
+                return getDescendents(lineage.getHeadCube()).filter(cube => cube !== cubeId);
             } else {
                 console.log("cube isnt tail");
                 let ignoreAfter = lineage.getNodeChild(cubeId);
-                let ignoreDescendents = getDescendents(ignoreAfter).push(ignoreAfter);
-                return descendents.filter(cube => !ignoreDescendents.includes(cube));
+                let ignoreDescendents = getDescendents(ignoreAfter);
+                ignoreDescendents.push(ignoreAfter);
+                return getDescendents(lineage.getHeadCube()).filter(cube => !ignoreDescendents.includes(cube));
             }
         } else {
             console.log("cube isnt in list");
             return descendents;
         }
     }
-
-
 
     function reformatAggregate(aggregate, cubeId) {
         // is cubeId in oldRoot->newRoot list?
@@ -374,7 +376,7 @@
     let interceptedRequests = [
         {"type":"hierarchy","regex":/\/1\.0\/task\/\d+\/hierarchy/},
         {"type":"ancestors","regex":/\/1\.0\/task\/\d+\/ancestors/},
-        {"type":"descendents","regex":/\/1\.0\/task\/\d+\/descendents/},
+        {"type":"descendents","regex":/\/1\.0\/task\/\d+\/descendants/},
         {"type":"aggregate","regex":/\/1\.0\/task\/\d+\/aggregate/}
     ]
     //TODO make sure this gets altered if any non-task endpoints are added :/
@@ -389,7 +391,7 @@
         console.log(interceptedRoutes);
         if (interceptedRoutes.length === 0 || undefined === interceptedRoutes[0]) return;
         console.log("Getting cubeId from url: " + url.match(interceptionRoot));
-        let cubeId = url.match(interceptionRoot);
+        let cubeId = parseInt(url.match(interceptionRoot)[1]);
         switch (interceptedRoutes[0].type) {
             case "hierarchy":
                 console.log("intercepted hierarchy call - reformatting");
@@ -427,7 +429,7 @@
     }
 
     function getDescendents(cubeId) {
-        return noInterceptGetData("/1.0/task/"+cubeId+"/descendents");
+        return noInterceptGetData("/1.0/task/"+cubeId+"/descendants");
     }
 
     function getAggregate(cubeId) {
