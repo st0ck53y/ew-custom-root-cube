@@ -15,6 +15,8 @@
 
     let DEBUG = true;
 
+    let customRootManual = null;
+
     /**
      * State: script init
      *   - load script settings from localStorage : any config, currently none in mind
@@ -117,6 +119,7 @@
         constructor() {
             this.head = null;
             this.tail = null; //using tail for faster/looplesser inserts
+            this.arr = []; //using for faster "is in list" check
         }
 
         add(cubeId) {
@@ -127,6 +130,7 @@
                 this.tail.next = cube;
             }
             this.tail = cube;
+            this.updateArr();
         }
 
         addAtHead(cubeId) {
@@ -137,6 +141,20 @@
                 cube.next = this.head;
             }
             this.head = cube;
+            this.updateArr();
+        }
+
+        updateArr() {
+            this.arr = [];
+            let cur = this.head;
+            while (cur !== null) {
+                this.arr.push(cur.cubeId);
+                cur = cur.next;
+            }
+        }
+
+        contains(cubeId) {
+            return this.arr.includes(cubeId);
         }
 
         getNodeByCubeId(cubeId) {
@@ -150,7 +168,7 @@
             return null;
         }
 
-        getJoiningCubeNode(cubes) {
+        getJoiningCube(cubes) {
             if (!Array.isArray(cubes)) {
                 return null;
             }
@@ -162,7 +180,45 @@
                 }
                 cur = cur.next;
             }
-            return joiner;
+            return joiner === null ? null : joiner.cubeId;
+        }
+
+        getNodeChild(cubeId) {
+            return this.getNodeByCubeId(cubeId).next.cubeId;
+        }
+
+        getHeadCube() {
+            return this.head.cubeId;
+        }
+
+        getSplitList(cubeId) {
+            //list before and after cubeId
+            let pre = [];
+            let post = [];
+            let hasJoined = false;
+            let cur = this.head;
+            while (cur !== null) {
+                if (cur.cubeId === cubeId) {
+                    hasJoined = true;
+                    continue;
+                }
+                if (!hasJoined) {
+                    pre.push(cur.cubeId);
+                } else {
+                    post.push(cur.cubeId);
+                }
+            }
+            return {pre: pre, post: post};
+        }
+
+        cubeIsHead(cubeId) {
+            // is original root
+            return this.head.cubeId === cubeId;
+        }
+
+        cubeIsTail(cubeId) {
+            // is custom root
+            return this.tail.cubeId === cubeId;
         }
 
         static fromString(str) {
@@ -183,7 +239,12 @@
         }
     }
 
-    async function setCustomRoot(cellId, cubeId) {
+    //TODO remove when UI exists
+    if (customRootManual !== null) {
+        setCustomRoot(null, customRootManual);
+    }
+
+    function setCustomRoot(cellId, cubeId) {
         //TODO check cube not currently stashed
         //TODO check cube belongs to cell
         //TODO sanity check cubeId isn't already root
@@ -194,7 +255,7 @@
             disabled: false
         }
         K.ls.set(cellId, customRoot);
-        let rootPath = await buildRootPath(cubeId);
+        let rootPath = buildRootPath(cubeId);
         K.ss.set(cellId, rootPath);
     }
 
@@ -211,28 +272,68 @@
     }
 
     function reformatHierarchy(originalTreeData, cubeId) {
-        // see #reformatAncestors and #reformatDescendents for logics \o/
-        return originalTreeData;
+        //FIXME - this doesnt work when the optional "depth" param is used
+        // https://eyewire.org/apidoc#/get-task_hierarchy
+        let newAncestors = reformatAncestors(originalTreeData.ancestors, cubeId);
+        let newDescendents = reformatDescendents(originalTreeData.descendents, cubeId);
+        return {ancestors: newAncestors, descendents: newDescendents};
     }
 
     function reformatAncestors(ancestors, cubeId) {
         // is cubeId or any ancestors in the oldRoot->newRoot list?
-        //   yes :- weeeeee
+        //   yes :- remove in-list ancestors, add rest of list
         //   no :- not possible, oldRoot should be. it should _always_ have a cube in the list. _always_
+        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        if (lineage !== null) {
+            let joiningCube = lineage.getJoiningCube(ancestors);
+            let splitList = lineage.getSplitList(joiningCube);
+            return ancestors.filter(cube => !splitList.pre.includes(cube)).concat(splitList.post);
+        } else {
+            //TODO check if custom root is set - if yes: alert? break something?
+        }
         return ancestors;
     }
 
     function reformatDescendents(descendents, cubeId) {
         // is cubeId in the oldRoot->newRoot list?
-        //   yes :- fun
-        //   no :- return unmodified?
-        return descendents;
+        //   yes :- get full list, remove real-descendents from next-in-list node
+        //   no :- return unmodified
+        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        if (lineage !== null && lineage.contains(cubeId)) {
+            if (lineage.cubeIsTail(cubeId)) {
+                // tail == custom root - return full cell cube list
+                return getDescendents(lineage.getHeadCube());
+            } else {
+                let ignoreAfter = lineage.getNodeChild(cubeId);
+                let ignoreDescendents = getDescendents(ignoreAfter).push(ignoreAfter);
+                return descendents.filter(cube => !ignoreDescendents.includes(cube));
+            }
+        } else {
+            return descendents;
+        }
     }
 
     function reformatAggregate(aggregate, cubeId) {
         // is cubeId in oldRoot->newRoot list?
-        //   yes :- swap parent and child-in-root-list, return other children untouched (TODO confirm no other kids needed, none removed, etc?)
+        //   yes :- swap parent and child-in-root-list, return other children untouched
         //   no :- return unmodified
+        let lineage = K.ss.get(null); //TODO multiple cells \o/
+        if (lineage !== null && lineage.contains(cubeId)) {
+            if (lineage.cubeIsHead(cubeId)) {
+                let newParent = lineage.getNodeChild(cubeId);
+                aggregate.task_family.parent = newParent;
+                aggregate.task_family.children = aggregate.task_family.children.filter(cube => newParent !== cube);
+            } else if (lineage.cubeIsTail(cubeId)) {
+                aggregate.task_family.children.push(aggregate.task_family.parent);
+                aggregate.task_family.parent = null;
+            } else {
+                let swap = aggregate.task_family.parent;
+                let newParent = lineage.getNodeChild(cubeId);
+                aggregate.task_family.parent = newParent;
+                aggregate.task_family.children = aggregate.task_family.children.filter(cube => newParent !== cube);
+                aggregate.task_family.children.push(swap);
+            }
+        }
         return aggregate;
     }
 
